@@ -1,88 +1,127 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <title>鮮食Go LIFF 下單</title>
-  <script src="https://static.line-scdn.net/liff/edge/2.1/sdk.js"></script>
+<meta charset="utf-8">
+<title>今日商品下單</title>
+<style>
+  body{font-family: Arial; padding:20px;}
+  .product{margin-bottom:10px;}
+  .cart-table{border-collapse:collapse;width:100%; margin-top:20px;}
+  .cart-table th, .cart-table td{border:1px solid #ccc; padding:5px;text-align:center;}
+  .qty-btn{width:25px; height:25px;}
+</style>
 </head>
 <body>
-  <h2>今日商品清單</h2>
-  <div id="product-list"></div>
-  <h3>購物車</h3>
-  <div id="cart-list"></div>
-  <button id="checkoutBtn">下單</button>
+<h2>今日商品下單</h2>
+<div id="product-list"></div>
 
-  <script>
-    let liffUserId, liffUserName;
-    let cart = [];
+<h3>購物車</h3>
+<table class="cart-table">
+  <thead>
+    <tr><th>商品名稱</th><th>數量</th><th>單價</th><th>小計</th></tr>
+  </thead>
+  <tbody id="cart-items"></tbody>
+  <tfoot>
+    <tr><td colspan="3" style="text-align:right;">總金額</td><td id="cart-total">0</td></tr>
+  </tfoot>
+</table>
 
-    async function initLiff() {
-      await liff.init({ liffId: "你的LIFF_ID" });
-      if (!liff.isLoggedIn()) liff.login();
-      const profile = await liff.getProfile();
-      liffUserId = profile.userId;
-      liffUserName = profile.displayName;
-      loadProducts();
+<label>取貨方式：
+  <select id="pickup-method"><option value="自取">自取</option><option value="宅配">宅配</option></select>
+</label><br><br>
+<label>聯絡資訊：
+  <input type="text" id="contact-info" placeholder="電話或地址">
+</label><br><br>
+<button id="checkout-btn">下單</button>
+
+<script>
+const webAppUrl = "YOUR_GAS_WEBAPP_URL";
+let liffUserId="";
+let products=[];
+let cart={}; // {serial: {name, price, qty}}
+
+// 初始化 LIFF
+async function initializeLiff(){
+  await liff.init({liffId:"YOUR_LIFF_ID"});
+  if(liff.isLoggedIn()){
+    const profile = await liff.getProfile();
+    liffUserId = profile.userId;
+  } else { liff.login(); }
+  await loadProducts();
+}
+
+// 載入今日商品
+async function loadProducts(){
+  const resp = await fetch(webAppUrl+"?action=getProducts");
+  const data = await resp.json();
+  products = data.products;
+  const container = document.getElementById("product-list");
+  container.innerHTML="";
+  products.forEach(p=>{
+    const div = document.createElement("div");
+    div.className="product";
+    div.innerHTML=`
+      ${p.name} - ${p.price} 元
+      <button class="qty-btn" data-serial="${p.serial}" data-action="minus">-</button>
+      <span id="qty-${p.serial}">0</span>
+      <button class="qty-btn" data-serial="${p.serial}" data-action="plus">+</button>
+    `;
+    container.appendChild(div);
+  });
+
+  // 綁定加減按鈕
+  document.querySelectorAll(".qty-btn").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      const serial = btn.dataset.serial;
+      const action = btn.dataset.action;
+      if(!cart[serial]) cart[serial]={name: products.find(x=>x.serial==serial).name, price: products.find(x=>x.serial==serial).price, qty:0};
+      if(action=="plus"){ cart[serial].qty++; }
+      else if(action=="minus" && cart[serial].qty>0){ cart[serial].qty--; }
+      document.getElementById("qty-"+serial).innerText = cart[serial].qty;
+      updateCartTable();
+    });
+  });
+}
+
+// 更新購物車表格
+function updateCartTable(){
+  const tbody = document.getElementById("cart-items");
+  tbody.innerHTML="";
+  let total=0;
+  for(let serial in cart){
+    if(cart[serial].qty>0){
+      const sub = cart[serial].qty*cart[serial].price;
+      total += sub;
+      const tr = document.createElement("tr");
+      tr.innerHTML=`<td>${cart[serial].name}</td><td>${cart[serial].qty}</td><td>${cart[serial].price}</td><td>${sub}</td>`;
+      tbody.appendChild(tr);
     }
+  }
+  document.getElementById("cart-total").innerText = total;
+}
 
-    async function loadProducts() {
-      const res = await fetch("https://script.google.com/macros/s/AKfycbzPn4ii6_R0vgkw6vTbEiS8y6Hbjw-rlOn5HfGzH7P4PoDNQX977QTdH4faiUuVzLgqPQ/exec");
-      const data = await res.json();
-      const productListDiv = document.getElementById("product-list");
-      data.products.forEach(p => {
-        const div = document.createElement("div");
-        div.innerHTML = `${p.name} - $${p.price} (庫存: ${p.stock}) 
-          <input type="number" min="1" max="${p.stock}" value="1" id="qty-${p.name}"> 
-          <button onclick="addToCart('${p.name}', ${p.price}, ${p.stock})">加入購物車</button>`;
-        productListDiv.appendChild(div);
-      });
+// 下單
+document.getElementById("checkout-btn").addEventListener("click", async ()=>{
+  const pickupMethod=document.getElementById("pickup-method").value;
+  const contactInfo=document.getElementById("contact-info").value;
+  if(Object.keys(cart).every(s=>cart[s].qty==0)){ alert("請選擇商品"); return; }
+  // 將購物車寫入 GAS Sheet
+  for(let serial in cart){
+    if(cart[serial].qty>0){
+      const p = cart[serial];
+      await fetch(webAppUrl+`?action=addToCart&lineId=${liffUserId}&product=${encodeURIComponent(p.name)}&qty=${p.qty}&price=${p.price}`);
     }
+  }
+  // 結帳
+  const resp = await fetch(webAppUrl+`?action=checkout&lineId=${liffUserId}&pickupMethod=${pickupMethod}&contactInfo=${encodeURIComponent(contactInfo)}`);
+  const data = await resp.json();
+  alert("✅ 下單完成，已發送 LINE 訊息確認！");
+  cart={};
+  loadProducts();
+  updateCartTable();
+});
 
-    function addToCart(name, price, stock) {
-      const qty = parseInt(document.getElementById(`qty-${name}`).value);
-      if(qty > stock) { alert("庫存不足"); return; }
-      const existing = cart.find(i => i.name === name);
-      if(existing) existing.qty += qty;
-      else cart.push({name, price, qty});
-      renderCart();
-    }
-
-    function renderCart() {
-      const cartDiv = document.getElementById("cart-list");
-      cartDiv.innerHTML = "";
-      cart.forEach(i => {
-        const div = document.createElement("div");
-        div.innerText = `${i.name} x ${i.qty} = ${i.qty*i.price}`;
-        cartDiv.appendChild(div);
-      });
-    }
-
-    async function checkout() {
-      if(cart.length === 0){ alert("購物車空"); return; }
-      const total = cart.reduce((sum,i)=>sum+i.price*i.qty,0);
-      const orderId = "ORD" + Date.now();
-      const postData = {
-        orderId,
-        userId: liffUserId,
-        userName: liffUserName,
-        items: cart,
-        totalAmount: total,
-        pickupMethod: "宅配", // 可改成用戶選擇
-        contact: "0912345678",
-        address: "台北市XXX"
-      };
-      const res = await fetch("你的 Apps Script 網址", {
-        method: "POST",
-        body: JSON.stringify(postData),
-        headers: {"Content-Type":"application/json"}
-      });
-      const result = await res.json();
-      if(result.status === "success") alert("下單成功！");
-      else alert("錯誤: " + result.message);
-    }
-
-    document.getElementById("checkoutBtn").addEventListener("click", checkout);
-    initLiff();
-  </script>
+initializeLiff();
+</script>
 </body>
 </html>
