@@ -1,127 +1,319 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 <head>
-<meta charset="utf-8">
-<title>今日商品下單</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>奇可智能打卡系統</title>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+
 <style>
-  body{font-family: Arial; padding:20px;}
-  .product{margin-bottom:10px;}
-  .cart-table{border-collapse:collapse;width:100%; margin-top:20px;}
-  .cart-table th, .cart-table td{border:1px solid #ccc; padding:5px;text-align:center;}
-  .qty-btn{width:25px; height:25px;}
+body { font-family: Arial; background:#f7f7f7; display:flex; justify-content:center; padding:25px; margin:0; }
+.card { background:white; width:95%; max-width:480px; box-shadow:0 8px 25px rgba(0,0,0,0.12); border-radius:18px; padding:25px 20px; display:flex; flex-direction:column; align-items:center; gap:20px; }
+#userInfo { font-size:26px; font-weight:bold; }
+#statusInfo { font-size:20px; padding:6px 18px; border-radius:30px; display:inline-block; font-weight:bold; }
+#dateTime { font-size:22px; }
+#btnClock { width:90px; height:90px; border-radius:50%; font-size:20px; font-weight:bold; color:white; border:none; cursor:pointer; transition:0.3s; }
+#btnClock.clock-in { background:linear-gradient(145deg, #3498db, #2980b9); }
+#btnClock.clock-out { background:linear-gradient(145deg, #2ecc71, #27ae60); }
+#todayRecords { width:100%; background:#fafafa; border-radius:12px; padding:15px; border:1px solid #ddd; font-size:18px; cursor:pointer; }
+#methodSelect button { padding:8px 15px; border-radius:12px; margin:3px; border:none; cursor:pointer; font-weight:bold; }
+#methodSelect button.active { background:#3498db; color:white; }
+.status-red { color:red; font-weight:bold; }
 </style>
 </head>
 <body>
-<h2>今日商品下單</h2>
-<div id="product-list"></div>
+<div class="card">
+    <div id="userInfo">正在獲取使用者資訊...</div>
+    <div id="statusInfo"></div>
+    <div id="dateTime">載入中…</div>
 
-<h3>購物車</h3>
-<table class="cart-table">
-  <thead>
-    <tr><th>商品名稱</th><th>數量</th><th>單價</th><th>小計</th></tr>
-  </thead>
-  <tbody id="cart-items"></tbody>
-  <tfoot>
-    <tr><td colspan="3" style="text-align:right;">總金額</td><td id="cart-total">0</td></tr>
-  </tfoot>
-</table>
+    <div id="methodSelect">
+        <button data-method="gps" class="active">GPS 打卡</button>
+        <button data-method="ip">IP 打卡</button>
+    </div>
 
-<label>取貨方式：
-  <select id="pickup-method"><option value="自取">自取</option><option value="宅配">宅配</option></select>
-</label><br><br>
-<label>聯絡資訊：
-  <input type="text" id="contact-info" placeholder="電話或地址">
-</label><br><br>
-<button id="checkout-btn">下單</button>
+    <button id="btnClock" class="clock-in">上班</button>
+
+    <div id="todayRecords">今日打卡紀錄：點擊可刷新</div>
+</div>
 
 <script>
-const webAppUrl = "YOUR_GAS_WEBAPP_URL";
-let liffUserId="";
-let products=[];
-let cart={}; // {serial: {name, price, qty}}
+const API_ENDPOINT = "https://script.google.com/macros/s/AKfycbxEXAMPLE/exec"; // 後端 GAS
+const COMPANY_SHEET = "公司據點";
+let userId="", userName="", clockStatus="上班", method="gps";
+let companyLocations = [];
 
-// 初始化 LIFF
-async function initializeLiff(){
-  await liff.init({liffId:"YOUR_LIFF_ID"});
-  if(liff.isLoggedIn()){
+// ===== 更新日期時間 =====
+function updateDateTime() {
+    const now = new Date();
+    document.getElementById("dateTime").textContent =
+        now.toLocaleString("zh-TW", { hour12:false });
+}
+setInterval(updateDateTime,1000);
+updateDateTime();
+
+// ===== LIFF 初始化 =====
+async function initUser(){
+    await liff.init({liffId:"2008555754-M5oJ3AmD"});
+    if(!liff.isLoggedIn()) await liff.login();
     const profile = await liff.getProfile();
-    liffUserId = profile.userId;
-  } else { liff.login(); }
-  await loadProducts();
+    userId = profile.userId;
+    userName = profile.displayName;
+    document.getElementById("userInfo").textContent = `${userName} 您好`;
 }
 
-// 載入今日商品
-async function loadProducts(){
-  const resp = await fetch(webAppUrl+"?action=getProducts");
-  const data = await resp.json();
-  products = data.products;
-  const container = document.getElementById("product-list");
-  container.innerHTML="";
-  products.forEach(p=>{
-    const div = document.createElement("div");
-    div.className="product";
-    div.innerHTML=`
-      ${p.name} - ${p.price} 元
-      <button class="qty-btn" data-serial="${p.serial}" data-action="minus">-</button>
-      <span id="qty-${p.serial}">0</span>
-      <button class="qty-btn" data-serial="${p.serial}" data-action="plus">+</button>
-    `;
-    container.appendChild(div);
-  });
+// ===== 取得公司據點 =====
+async function fetchCompanyLocations(){
+    const res = await fetch(`${API_ENDPOINT}?action=getCompanyLocations`);
+    companyLocations = await res.json();
+}
 
-  // 綁定加減按鈕
-  document.querySelectorAll(".qty-btn").forEach(btn=>{
-    btn.addEventListener("click",()=>{
-      const serial = btn.dataset.serial;
-      const action = btn.dataset.action;
-      if(!cart[serial]) cart[serial]={name: products.find(x=>x.serial==serial).name, price: products.find(x=>x.serial==serial).price, qty:0};
-      if(action=="plus"){ cart[serial].qty++; }
-      else if(action=="minus" && cart[serial].qty>0){ cart[serial].qty--; }
-      document.getElementById("qty-"+serial).innerText = cart[serial].qty;
-      updateCartTable();
+// ===== GPS 取位 =====
+function getGPS(){
+    return new Promise((resolve,reject)=>{
+        navigator.geolocation.getCurrentPosition(pos=>{
+            resolve({lat:pos.coords.latitude, lng:pos.coords.longitude});
+        },err=>{
+            reject(err);
+        },{enableHighAccuracy:true});
     });
-  });
 }
 
-// 更新購物車表格
-function updateCartTable(){
-  const tbody = document.getElementById("cart-items");
-  tbody.innerHTML="";
-  let total=0;
-  for(let serial in cart){
-    if(cart[serial].qty>0){
-      const sub = cart[serial].qty*cart[serial].price;
-      total += sub;
-      const tr = document.createElement("tr");
-      tr.innerHTML=`<td>${cart[serial].name}</td><td>${cart[serial].qty}</td><td>${cart[serial].price}</td><td>${sub}</td>`;
-      tbody.appendChild(tr);
-    }
-  }
-  document.getElementById("cart-total").innerText = total;
+// ===== 計算距離 (公尺) =====
+function distance(lat1,lng1,lat2,lng2){
+    const R=6371000;
+    const dLat=(lat2-lat1)*Math.PI/180;
+    const dLng=(lng2-lng1)*Math.PI/180;
+    const a=Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+    const c=2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+    return R*c;
 }
 
-// 下單
-document.getElementById("checkout-btn").addEventListener("click", async ()=>{
-  const pickupMethod=document.getElementById("pickup-method").value;
-  const contactInfo=document.getElementById("contact-info").value;
-  if(Object.keys(cart).every(s=>cart[s].qty==0)){ alert("請選擇商品"); return; }
-  // 將購物車寫入 GAS Sheet
-  for(let serial in cart){
-    if(cart[serial].qty>0){
-      const p = cart[serial];
-      await fetch(webAppUrl+`?action=addToCart&lineId=${liffUserId}&product=${encodeURIComponent(p.name)}&qty=${p.qty}&price=${p.price}`);
+// ===== 取得中文地址 =====
+async function getAddress(lat,lng){
+    try{
+        const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&language=zh-TW&key=YOUR_GOOGLE_API_KEY`);
+        const data = await res.json();
+        if(data.results && data.results[0]) return data.results[0].formatted_address;
+    }catch(e){ console.log(e); }
+    return "";
+}
+
+// ===== 執行打卡 =====
+async function performClock(){
+    let ip="", gps=null, address="";
+    if(method==="ip"){
+        try{
+            ip = await (await fetch("https://api.ipify.org?format=json")).json().ip;
+        }catch(e){ ip=""; }
+    }else{
+        try{
+            gps = await getGPS();
+            address = await getAddress(gps.lat,gps.lng);
+        }catch(e){ Swal.fire("GPS 失敗","請確認定位權限","error"); return; }
     }
-  }
-  // 結帳
-  const resp = await fetch(webAppUrl+`?action=checkout&lineId=${liffUserId}&pickupMethod=${pickupMethod}&contactInfo=${encodeURIComponent(contactInfo)}`);
-  const data = await resp.json();
-  alert("✅ 下單完成，已發送 LINE 訊息確認！");
-  cart={};
-  loadProducts();
-  updateCartTable();
+
+    // 距離判斷
+    let minDistance = Infinity, nearest="";
+    if(gps){
+        companyLocations.forEach(c=>{
+            const d = distance(c.lat,c.lng,gps.lat,gps.lng);
+            if(d<minDistance){ minDistance=d; nearest=c.name; }
+        });
+    }
+
+    // 超距紅字提示
+    let statusInfo = document.getElementById("statusInfo");
+    if(minDistance>0 && minDistance> (companyLocations.find(c=>c.name===nearest)?.allow||0)){
+        statusInfo.textContent = `距離最近公司: ${nearest} ${Math.round(minDistance)} m`;
+        statusInfo.classList.add("status-red");
+    }else if(minDistance>0){
+        statusInfo.textContent = `距離最近公司: ${nearest} ${Math.round(minDistance)} m`;
+        statusInfo.classList.remove("status-red");
+    }
+
+    // 發送 API
+    const res = await fetch(API_ENDPOINT,{
+        method:"POST",
+        body: JSON.stringify({
+            userId,userName, status:clockStatus, method, ip, gps, address
+        })
+    });
+    const data = await res.json();
+    Swal.fire(data.message);
+    // 切換上下班
+    if(clockStatus==="上班"){ clockStatus="下班"; btnClock.textContent="下班"; btnClock.classList.replace("clock-in","clock-out"); }
+    else{ clockStatus="上班"; btnClock.textContent="上班"; btnClock.classList.replace("clock-out","clock-in"); }
+    updateTodayRecords();
+}
+
+// ===== 今日打卡紀錄 =====
+async function updateTodayRecords(){
+    const today = new Date().toLocaleDateString("zh-TW").replace(/\//g,"/");
+    const res = await fetch(`${API_ENDPOINT}?action=getToday&userId=${userId}`);
+    const data = await res.json();
+    const container = document.getElementById("todayRecords");
+    if(!data.length){ container.innerHTML="今日打卡紀錄：無"; return; }
+    container.innerHTML = "今日打卡紀錄：<br>"+data.map(r=>{
+        return `${r.status} ${r.time} ${r.method} ${r.ip||""} ${r.address||""}`;
+    }).join("<br>");
+}
+
+// ===== DOM 事件 =====
+const btnClock = document.getElementById("btnClock");
+btnClock.onclick = performClock;
+
+document.querySelectorAll("#methodSelect button").forEach(b=>{
+    b.onclick=()=>{
+        document.querySelectorAll("#methodSelect button").forEach(x=>x.classList.remove("active"));
+        b.classList.add("active");
+        method = b.dataset.method;
+    };
 });
 
-initializeLiff();
+document.getElementById("todayRecords").onclick = updateTodayRecords;
+
+// ===== 初始化 =====
+(async()=>{
+    await initUser();
+    await fetchCompanyLocations();
+    await updateTodayRecords();
+})();
 </script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
