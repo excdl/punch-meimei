@@ -100,12 +100,20 @@ body {
 
     <div id="todayRecords" onclick="updateTodayRecords()">今日打卡紀錄：點擊刷新</div>
 </div>
-
 <script>
-const API_ENDPOINT = "https://script.google.com/macros/s/AKfycbysTYT3PxKtnJysULPXcAc8kj-vX7JRpIiNEiU6LxeOlFW0RYI5kOQu-uej2SuJLXCJ/exec";
-let userId="",userName="",isClockIn=true;
+const API_ENDPOINT = "https://script.google.com/macros/s/AKfycbxGLGMGDfQDITIOx0EHlRlYWs-DpBwkWWl-6WkQCxe2eEPVBILGTibKpg_Ev9YBOzc/exec";
+let userId="", userName="", isClockIn=true;
 
-async function initUser(){
+// 時間顯示
+function updateDateTime(){
+  const now = new Date();
+  document.getElementById("dateTime").textContent = now.toLocaleString("zh-TW",{hour12:false});
+}
+setInterval(updateDateTime,1000);
+updateDateTime();
+
+// 取得使用者資訊
+async function updateUserInfo(){
   await liff.init({liffId:"2008504718-nmXP0WRV"});
   if(!liff.isLoggedIn()) await liff.login();
   const profile = await liff.getProfile();
@@ -114,76 +122,70 @@ async function initUser(){
   document.getElementById("userInfo").textContent = `${userName} 您好`;
 }
 
-function updateDateTime(){
-  const now = new Date();
-  document.getElementById("dateTime").textContent = now.toLocaleString("zh-TW",{hour12:false});
-}
-setInterval(updateDateTime,1000);
-updateDateTime();
-
-async function getIP(){
-  const cache = sessionStorage.getItem("myIP");
-  if(cache) return cache;
+// 檢查公司與距離
+async function checkCompanyStatus(){
+  let ip="", lat=0, lng=0;
   try{
-    const res = await fetch("https://api.ipify.org?format=json");
-    const data = await res.json();
-    sessionStorage.setItem("myIP",data.ip);
-    return data.ip;
-  }catch{return "";}
+    const ipRes = await fetch("https://api.ipify.org?format=json");
+    ip = (await ipRes.json()).ip;
+  }catch{}
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(pos=>{
+      lat = pos.coords.latitude;
+      lng = pos.coords.longitude;
+      fetch(`${API_ENDPOINT}?action=check&lat=${lat}&lng=${lng}&ip=${ip}`)
+        .then(r=>r.json())
+        .then(data=>{
+          document.getElementById("nearestCompany").textContent = data.nearestCompany.name || "不明連線";
+          document.getElementById("rangeStatus").textContent = data.rangeStatus || "非打卡範圍";
+        });
+    },()=>{console.log("無法取得GPS");});
+  }
 }
-
-// 每 5 秒更新公司與範圍
-async function updateStatus(){
-  const ip = await getIP();
-  if(!navigator.geolocation) return;
-  navigator.geolocation.getCurrentPosition(async pos=>{
-    const gps={lat:pos.coords.latitude,lng:pos.coords.longitude};
-    try{
-      const res = await fetch(`${API_ENDPOINT}?action=check&lat=${gps.lat}&lng=${gps.lng}&ip=${ip}`);
-      const data = await res.json();
-      document.getElementById("nearestCompany").textContent = data.ipMatched ? data.nearestCompany.name : "不明連線";
-      document.getElementById("rangeStatus").textContent = data.rangeStatus;
-    }catch(err){
-      document.getElementById("nearestCompany").textContent = "錯誤";
-      document.getElementById("rangeStatus").textContent = "-";
-    }
-  });
-}
-setInterval(updateStatus,5000);
-updateStatus();
 
 // 打卡
-document.getElementById("btnClock").onclick = async ()=>{
-  const ip = await getIP();
-  if(!navigator.geolocation){ Swal.fire("⚠ 無法取得位置"); return; }
-  navigator.geolocation.getCurrentPosition(async pos=>{
-    const gps={lat:pos.coords.latitude,lng:pos.coords.longitude};
-    const status = isClockIn?"上班":"下班";
-    const res = await fetch(API_ENDPOINT,{method:"POST",body:JSON.stringify({userId,userName,status,ip,gps})});
-    const data = await res.json();
-    Swal.fire({icon:"success",title:data.message,html:`${data.date} ${data.time}`,timer:2000,showConfirmButton:false});
-    isClockIn=!isClockIn;
-    const btn=document.getElementById("btnClock");
-    btn.textContent = isClockIn?"上班":"下班";
-    btn.className = `btnClock ${isClockIn?"":"off"}`;
-    updateTodayRecords();
-  },err=>{Swal.fire("⚠ 無法取得GPS位置");});
+async function performClock(){
+  let ip="", lat=0, lng=0;
+  try{ ip = (await fetch("https://api.ipify.org?format=json").then(r=>r.json())).ip; }catch{}
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(async pos=>{
+      lat = pos.coords.latitude;
+      lng = pos.coords.longitude;
+      const status = isClockIn ? "上班" : "下班";
+      const res = await fetch(API_ENDPOINT,{
+        method:"POST",
+        body: JSON.stringify({userId,userName,ip,status,gps:{lat,lng}})
+      });
+      const data = await res.json();
+      Swal.fire({icon:"success",title:data.message,html:`${data.date} ${data.time}`,timer:2000,showConfirmButton:false});
+      isClockIn = !isClockIn;
+      const btn = document.getElementById("btnClock");
+      btn.textContent = isClockIn?"上班":"下班";
+      btn.className = `circleBtn ${isClockIn?"on":"off"}`;
+      updateTodayRecords();
+      checkCompanyStatus();
+    },()=>{Swal.fire("⚠ 無法取得GPS位置");});
+  }
 }
 
-// 今日打卡紀錄
+// 今日紀錄
 async function updateTodayRecords(){
-  const today = new Date().toLocaleDateString("zh-TW",{timeZone:"Asia/Taipei"}).replace(/\//g,"-");
+  const today = new Date();
+  const formattedDate = today.getFullYear()+"-"+String(today.getMonth()+1).padStart(2,'0')+"-"+String(today.getDate()).padStart(2,'0');
   try{
-    const res = await fetch(`${API_ENDPOINT}?action=getToday&userId=${userId}&date=${today}`);
+    const res = await fetch(`${API_ENDPOINT}?action=getToday&userId=${userId}&date=${formattedDate}`);
     const data = await res.json();
-    const container=document.getElementById("todayRecords");
-    if(!data.length){container.innerHTML="今日打卡紀錄：無"; return;}
+    const container = document.getElementById("todayRecords");
+    if(!data.length){ container.innerHTML="今日打卡紀錄：無"; return; }
     container.innerHTML="今日打卡紀錄：<br>"+data.map(r=>`${r.status} ${r.time} ${r.method} ${r.ip} ${r.nearestCompany} ${r.rangeStatus}`).join("<br>");
-  }catch{document.getElementById("todayRecords").innerHTML="今日打卡紀錄：讀取失敗";}
+  }catch{ document.getElementById("todayRecords").textContent="今日打卡紀錄：讀取失敗"; }
 }
+
+document.getElementById("btnClock").onclick = performClock;
 
 window.onload = async ()=>{
-  await initUser();
+  await updateUserInfo();
+  checkCompanyStatus();
   updateTodayRecords();
 };
 </script>
