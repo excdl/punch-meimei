@@ -6,6 +6,7 @@
 <title>智能打卡系統</title>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+
 <style>
 body { 
     font-family: Arial; 
@@ -37,7 +38,7 @@ body {
     justify-content:center;
     gap:12px;
     font-size:18px;
-    margin-bottom:8px;
+    margin-bottom:12px;
     flex-wrap: nowrap;
 }
 #companyInfo .badge {
@@ -63,7 +64,6 @@ body {
 }
 .circleBtn.on { background:#3498db; color:white; }
 .circleBtn.off { background:#2ecc71; color:white; }
-.circleBtn.disabled { background:#ccc; cursor:not-allowed; }
 
 /* 今日打卡紀錄 */
 #todayRecords {
@@ -96,7 +96,7 @@ body {
         <div id="range" class="badge err">判斷中</div>
     </div>
 
-    <button id="btnClock" class="circleBtn on disabled">上班</button>
+    <button id="btnClock" class="circleBtn on">上班</button>
 
     <div id="todayRecords" onclick="updateTodayRecords()">今日打卡紀錄：點擊刷新</div>
 </div>
@@ -106,6 +106,7 @@ const API_ENDPOINT = "https://script.google.com/macros/s/AKfycbzDHUOlToNzrjnAdr3
 let userId="", userName="";
 let isClockIn = true;
 
+// 時間顯示
 function updateDateTime(){
     const now = new Date();
     document.getElementById("dateTime").textContent = now.toLocaleString("zh-TW",{hour12:false});
@@ -113,6 +114,7 @@ function updateDateTime(){
 setInterval(updateDateTime,1000);
 updateDateTime();
 
+// LIFF 初始化
 async function initLIFF(){
     await liff.init({liffId:"2008504718-nmXP0WRV"});
     if(!liff.isLoggedIn()) await liff.login();
@@ -122,6 +124,7 @@ async function initLIFF(){
     document.getElementById("userInfo").textContent = `${userName} 您好`;
 }
 
+// 取得 IP
 async function getIP(){
     const cache = sessionStorage.getItem("myIP");
     if(cache) return cache;
@@ -133,29 +136,30 @@ async function getIP(){
     }catch{return "";}
 }
 
+// 更新公司名稱與打卡範圍
 function updateCompanyUI(data){
     const c = document.getElementById("company");
     const r = document.getElementById("range");
-    const btn = document.getElementById("btnClock");
 
-    c.innerText = data.nearestCompany || "未知連線";
-    c.className = "badge " + (data.nearestCompany?"ok":"err");
+    // 公司名稱顯示邏輯：IP匹配成功才顯示據點名稱
+    c.innerText = data.ipMatched ? (data.nearestCompany || "未知據點") : "不明連線";
+    c.className = "badge " + (data.ipMatched ? "ok" : "err");
 
+    // 打卡範圍顯示
     if(data.rangeStatus==="正常"){
         r.innerText = "可打卡範圍";
         r.className = "badge ok";
-        btn.classList.remove("disabled");
-    }else{
+    } else {
         r.innerText = "非打卡範圍";
         r.className = "badge err";
-        btn.classList.add("disabled");
     }
 }
 
+// 即時檢查距離與 IP
 async function checkDistance(){
     const ip = await getIP().catch(()=> "");
     if(!navigator.geolocation){
-        updateCompanyUI({nearestCompany:"未知連線", rangeStatus:"異常"});
+        updateCompanyUI({nearestCompany:"未知據點", rangeStatus:"異常", ipMatched:false});
         return;
     }
     navigator.geolocation.getCurrentPosition(async pos=>{
@@ -165,17 +169,15 @@ async function checkDistance(){
             const data = await res.json();
             updateCompanyUI(data);
         }catch(e){
-            updateCompanyUI({nearestCompany:"未知連線", rangeStatus:"異常"});
+            updateCompanyUI({nearestCompany:"未知據點", rangeStatus:"異常", ipMatched:false});
         }
     }, err=>{
-        updateCompanyUI({nearestCompany:"未知連線", rangeStatus:"異常"});
+        updateCompanyUI({nearestCompany:"未知據點", rangeStatus:"異常", ipMatched:false});
     });
 }
 
+// 執行打卡
 async function performClock(){
-    const btn = document.getElementById("btnClock");
-    if(btn.classList.contains("disabled")) return;
-
     const ip = await getIP();
     navigator.geolocation.getCurrentPosition(async pos=>{
         const gps = {lat: pos.coords.latitude, lng: pos.coords.longitude};
@@ -190,7 +192,9 @@ async function performClock(){
             Swal.fire({icon:"success", title:data.message, html:`${data.date} ${data.time}`, timer:2000, showConfirmButton:false});
             updateCompanyUI(data);
 
+            // 切換上班/下班文字
             isClockIn = !isClockIn;
+            const btn = document.getElementById("btnClock");
             btn.textContent = isClockIn?"上班":"下班";
             btn.className = `circleBtn ${isClockIn?"on":"off"}`;
 
@@ -203,30 +207,45 @@ async function performClock(){
     });
 }
 
+// 今日打卡紀錄
 async function updateTodayRecords(){
-    const today = new Date().toLocaleDateString("zh-TW").replace(/\//g,"/");
+    const now = new Date();
+    // 使用 yyyy-MM-dd 格式，與試算表存的日期一致
+    const today = now.getFullYear() + "-" +
+                  String(now.getMonth()+1).padStart(2,'0') + "-" +
+                  String(now.getDate()).padStart(2,'0');
+
     try{
         const res = await fetch(`${API_ENDPOINT}?action=getToday&userId=${userId}&date=${today}`);
         const data = await res.json();
         const container = document.getElementById("todayRecords");
-        if(!data.length){container.innerHTML="今日打卡紀錄：無"; return;}
-        container.innerHTML="今日打卡紀錄：<br>"+data.map(r=>`${r.status} ${r.time} ${r.method} ${r.ip}`).join("<br>");
-    }catch{
+        if(!data.length){
+            container.innerHTML="今日打卡紀錄：無";
+            return;
+        }
+
+        container.innerHTML = "今日打卡紀錄：<br>" +
+            data.map(r => `${r.status} ${r.time} ${r.method} ${r.ip} ${r.nearestCompany || ''}`).join("<br>");
+    }catch(err){
         document.getElementById("todayRecords").innerHTML="今日打卡紀錄：讀取失敗";
+        console.error(err);
     }
 }
 
 document.getElementById("btnClock").onclick = performClock;
 
+// 初始化
 window.onload = async ()=>{
     await initLIFF();
-    checkDistance();                  
-    setInterval(checkDistance,15000); 
+    checkDistance();
+    setInterval(checkDistance,15000); // 每15秒更新距離/公司
     updateTodayRecords();
 };
 </script>
 </body>
 </html>
+
+
 
 
 
