@@ -3,151 +3,159 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>升級版智能打卡系統</title>
+<title>智能打卡系統</title>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY"></script>
 <style>
-body{margin:0;padding:0;font-family:Arial;background:#f0f4f8;}
-#map{width:100vw;height:100vh;}
-#clockBtn{
-    position:absolute;bottom:30px;left:50%;transform:translateX(-50%);
-    width:120px;height:120px;border-radius:50%;border:none;
-    font-size:24px;color:#fff;font-weight:bold;cursor:pointer;
-    display:flex;align-items:center;justify-content:center;
-    transition:0.3s;z-index:5;
-}
-.clock-in{background:linear-gradient(145deg,#3498db,#2980b9);}
-.clock-out{background:linear-gradient(145deg,#2ecc71,#27ae60);}
-.error{background:linear-gradient(145deg,#e74c3c,#c0392b);}
-#infoCard{
-    position:absolute;top:20px;left:50%;transform:translateX(-50%);
-    background:#fff;border-radius:18px;padding:15px 20px;
-    box-shadow:0 8px 20px rgba(0,0,0,0.15);z-index:5;
-    display:flex;flex-direction:column;align-items:center;gap:8px;
-}
-#userInfo{font-size:20px;font-weight:bold;}
-#statusInfo{font-size:16px;padding:5px 12px;border-radius:20px;font-weight:bold;}
-#todayRecords{font-size:14px;background:#fafafa;border-radius:12px;padding:10px;border:1px solid #ddd;cursor:pointer;}
+body { font-family: Arial; background:#f7f7f7; display:flex; justify-content:center; padding:25px; margin:0;}
+.card { background:white; width:95%; max-width:480px; box-shadow:0 8px 25px rgba(0,0,0,0.12); border-radius:18px; padding:25px 20px; display:flex; flex-direction:column; align-items:center; gap:20px;}
+#userInfo { font-size:26px; font-weight:bold; }
+#statusInfo { font-size:18px; padding:6px 18px; border-radius:30px; display:inline-block; font-weight:bold;}
+#dateTime { font-size:20px; }
+#map { width:100%; height:250px; border-radius:12px; border:1px solid #ddd; }
+#btnClock { width:100px; height:100px; border-radius:50%; font-size:20px; font-weight:bold; border:none; cursor:pointer; color:white; transition:0.3s;}
+#todayRecords { width:100%; background:#fafafa; border-radius:12px; padding:15px; border:1px solid #ddd; font-size:18px; cursor:pointer;}
+.bounce { animation: bounce 0.4s ease;}
+@keyframes bounce {0% {transform: scale(1);} 30% {transform: scale(1.1);} 50% {transform: scale(0.95);} 70% {transform: scale(1.05);} 100% {transform: scale(1);}}
 </style>
 </head>
 <body>
-<div id="map"></div>
-<div id="clockBtn" class="clock-in">上班</div>
-<div id="infoCard">
+<div class="card">
     <div id="userInfo">正在獲取使用者資訊...</div>
-    <div id="statusInfo"></div>
-    <div id="todayRecords" onclick="updateTodayRecords()">今日打卡紀錄：點擊刷新</div>
+    <div id="statusInfo">載入中...</div>
+    <div id="dateTime"></div>
+    <div id="map">載入地圖中...</div>
+    <button id="btnClock">上班</button>
+    <div id="todayRecords">今日打卡紀錄：點擊刷新</div>
 </div>
 
 <script>
-const API_ENDPOINT="https://script.google.com/macros/s/AKfycbzveR74NPq6vbDZMdGg3PimAGRSYTW3exDf3drgNqn44oaxLPb-3sVTnDl-qkh_xyQ1/exec";
-const COMPANY_IPS=["220.132.124.179","125.228.248.110","114.34.128.159"];
-let userId="", userName="", map, userMarker, companyMarkers=[];
+const API_ENDPOINT = "https://script.google.com/macros/s/AKfycbzveR74NPq6vbDZMdGg3PimAGRSYTW3exDf3drgNqn44oaxLPb-3sVTnDl-qkh_xyQ1/exec";
+let userId, userName, userLat, userLng, isClockIn = true, companyLocations=[];
 
-// ===== LIFF 登入 =====
-async function initLIFF(){
-    await liff.init({ liffId:"YOUR_LIFF_ID" });
+// 更新日期時間
+function updateDateTime(){
+    const now = new Date();
+    document.getElementById("dateTime").textContent = now.toLocaleString("zh-TW",{hour12:false});
+}
+setInterval(updateDateTime,1000);
+updateDateTime();
+
+// LIFF 初始化並取得使用者資訊
+async function initUser(){
+    await liff.init({liffId:"YOUR_LIFF_ID"});
     if(!liff.isLoggedIn()) await liff.login();
     const profile = await liff.getProfile();
-    userId=profile.userId;
-    userName=profile.displayName;
-    document.getElementById("userInfo").textContent=userName+" 您好";
-}
-initLIFF();
+    userId = profile.userId;
+    userName = profile.displayName;
+    document.getElementById("userInfo").textContent = `${userName} 您好`;
 
-// ===== IP取得 =====
-async function getIP(){
-    try{ const res=await fetch("https://api.ipify.org?format=json"); const data=await res.json(); return data.ip;} 
-    catch{return "";}
+    // 取得 GPS
+    navigator.geolocation.getCurrentPosition(pos=>{
+        userLat = pos.coords.latitude;
+        userLng = pos.coords.longitude;
+        loadCompanyLocations();
+    },()=>{document.getElementById("map").textContent="無法取得 GPS";});
 }
 
-// ===== 初始化地圖 =====
-async function initMap(){
-    map = new google.maps.Map(document.getElementById("map"), {zoom:15, center:{lat:25,lng:121}});
-    const res = await fetch(`${API_ENDPOINT}?action=getCompanyLocations`);
-    const locations = await res.json();
-    companyMarkers=[];
-    locations.forEach(loc=>{
-        const marker = new google.maps.Marker({position:{lat:parseFloat(loc.lat), lng:parseFloat(loc.lng)}, map, title: loc.name});
-        marker.allow=parseFloat(loc.allow);
-        marker.name=loc.name;
+// 取得公司據點
+async function loadCompanyLocations(){
+    try{
+        companyLocations = await fetch(`${API_ENDPOINT}?action=getCompanyLocations`).then(r=>r.json());
+        initMap();
+    }catch(e){console.error(e);}
+}
+
+// 初始化地圖
+let map,userMarker,companyMarkers=[];
+function initMap(){
+    map = new google.maps.Map(document.getElementById("map"),{
+        zoom:16,
+        center:{lat:userLat,lng:userLng}
+    });
+    userMarker = new google.maps.Marker({
+        position:{lat:userLat,lng:userLng},
+        map:map,
+        title:"您目前位置",
+        icon:{path:google.maps.SymbolPath.CIRCLE, scale:7, fillColor:"#3498db", fillOpacity:1, strokeWeight:1}
+    });
+    companyLocations.forEach(c=>{
+        const marker = new google.maps.Marker({
+            position:{lat:c.lat,lng:c.lng},
+            map:map,
+            title:c.name
+        });
         companyMarkers.push(marker);
     });
 }
-initMap();
 
-// ===== 獲取使用者位置 =====
-async function getUserLocation(){
-    return new Promise((resolve,reject)=>{
-        navigator.geolocation.getCurrentPosition(pos=>resolve({lat:pos.coords.latitude,lng:pos.coords.longitude}),
-        err=>reject(err),{enableHighAccuracy:true});
-    });
-}
-
-// ===== 計算距離 =====
-function calcDistance(lat1,lng1,lat2,lng2){
-    const R=6371000; const dLat=(lat2-lat1)*Math.PI/180; const dLng=(lng2-lng1)*Math.PI/180;
-    const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+// 計算距離 (公尺)
+function getDistance(lat1,lng1,lat2,lng2){
+    const R=6371000;
+    const toRad=Math.PI/180;
+    const dLat=(lat2-lat1)*toRad;
+    const dLng=(lng2-lng1)*toRad;
+    const a=Math.sin(dLat/2)**2+Math.cos(lat1*toRad)*Math.cos(lat2*toRad)*Math.sin(dLng/2)**2;
     const c=2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
     return R*c;
 }
 
-// ===== 更新今日打卡紀錄 =====
+// 更新今日打卡紀錄
 async function updateTodayRecords(){
-    const container=document.getElementById("todayRecords");
-    const today=new Date().toISOString().slice(0,10);
+    const today = new Date().toISOString().slice(0,10);
     try{
-        const res=await fetch(`${API_ENDPOINT}?action=getToday&userId=${userId}&date=${today}`);
-        const data=await res.json();
-        if(!data.length) container.innerHTML="今日打卡紀錄：無";
-        else container.innerHTML="今日打卡紀錄：<br>"+data.map(r=>`${r.status} ${r.time} ${r.ip}`).join("<br>");
-    } catch{ container.innerHTML="今日打卡紀錄：讀取失敗";}
+        const res = await fetch(`${API_ENDPOINT}?action=getToday&userId=${userId}&date=${today}`);
+        const data = await res.json();
+        const container = document.getElementById("todayRecords");
+        if(!data.length){ container.innerHTML="今日打卡紀錄：無"; return;}
+        container.innerHTML = "今日打卡紀錄：<br>"+data.map(r=>{
+            const d = new Date(r.time);
+            let status=r.status;
+            let ipLabel = r.ip_ok?"(IP OK)":"(IP 錯誤)";
+            let gpsLabel = r.gps_ok?"(GPS OK)":"(GPS 超距)";
+            return `${status} ${d.toLocaleTimeString()} ${ipLabel} ${gpsLabel}`;
+        }).join("<br>");
+    }catch(e){console.error(e);}
 }
 
-// ===== 打卡函式 =====
-async function performClock(){
-    const btn=document.getElementById("clockBtn");
-    btn.disabled=true;
-    let ip = await getIP();
-    let loc={lat:0,lng:0};
-    try{ loc=await getUserLocation();} catch(e){ console.log(e);}
-    // 更新使用者地圖位置
-    if(userMarker) userMarker.setMap(null);
-    userMarker=new google.maps.Marker({position:loc,map,title:"您目前位置",icon:{path:google.maps.SymbolPath.CIRCLE,scale:8,fillColor:"#0000FF",fillOpacity:1,strokeWeight:1}});
-    map.setCenter(loc);
-
-    // 判斷距離最近公司
-    let nearest=null, minDist=Infinity;
-    companyMarkers.forEach(c=>{
-        const dist=calcDistance(loc.lat,loc.lng,c.getPosition().lat(),c.getPosition().lng());
-        if(dist<minDist){ minDist=dist; nearest=c; }
-        // 改變標記顏色
-        c.setIcon({path:google.maps.SymbolPath.CIRCLE,scale:10,fillColor:(dist<=c.allow)?"#2ecc71":"#e74c3c",fillOpacity:1,strokeWeight:1});
+// 打卡按鈕事件
+document.getElementById("btnClock").onclick=async ()=>{
+    if(!userLat || !userLng){ Swal.fire({icon:"error",title:"無法取得位置"}); return;}
+    const ip = await fetch("https://api.ipify.org?format=json").then(r=>r.json()).then(d=>d.ip).catch(()=>"");
+    // 判斷 GPS 是否在允許範圍內
+    let gps_ok=false;
+    companyLocations.forEach(c=>{
+        if(getDistance(userLat,userLng,c.lat,c.lng)<=c.allow) gps_ok=true;
     });
-    const withinRange=nearest? minDist<=nearest.allow:false;
-    const ipOk=COMPANY_IPS.includes(ip);
-
-    // API送打卡資料
-    const status=btn.classList.contains("clock-in")?"上班":"下班";
-    await fetch(API_ENDPOINT,{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,displayName:userName,status,lat:loc.lat,lng:loc.lng,ip})});
-
-    // 提示
-    if(withinRange && ipOk){
-        btn.className="clock-out"; btn.textContent="下班";
-        Swal.fire({icon:"success",title:"🎉 打卡成功",html:`<b>公司:</b> ${nearest.name}<br><b>距離:</b> ${Math.round(minDist)}m`,timer:2000,showConfirmButton:false});
-    } else{
-        btn.className="error"; Swal.fire({icon:"warning",title:"⚠ 非公司網路或異地",html:`<b>距離最近公司:</b> ${Math.round(minDist)}m<br><b>IP:</b> ${ip}`,timer:2500,showConfirmButton:false});
-    }
-    btn.disabled=false;
-    updateTodayRecords();
+    // 呼叫 API
+    try{
+        const res = await fetch(API_ENDPOINT,{method:"POST",body:JSON.stringify({
+            userId,userName,status:isClockIn?"上班":"下班",ip,userLat,userLng,gps_ok
+        })});
+        const data = await res.json();
+        if(data.message.includes("成功")){
+            Swal.fire({icon:"success",title:`${isClockIn?"上班":"下班"}打卡成功`,html:`打卡時間：${data.date} ${data.time}`,timer:2000,showConfirmButton:false});
+            isClockIn=!isClockIn;
+            document.getElementById("btnClock").textContent=isClockIn?"上班":"下班";
+            document.getElementById("btnClock").style.backgroundColor=isClockIn?"#3498db":"#2ecc71";
+            updateTodayRecords();
+        }else{
+            Swal.fire({icon:"error",title:"打卡失敗",text:data.message});
+        }
+    }catch(e){console.error(e);}
 }
 
-// ===== 事件綁定 =====
-document.getElementById("clockBtn").onclick=performClock;
+// 初始化
+window.onload=async ()=>{
+    document.getElementById("btnClock").style.backgroundColor="#3498db";
+    await initUser();
+    await updateTodayRecords();
+}
 </script>
 </body>
 </html>
+
 
 
 
