@@ -1,158 +1,113 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>智能打卡系統</title>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
-body { 
-    font-family: Arial,"Noto Sans TC"; 
-    display:flex; 
-    justify-content:center; 
-    padding:20px; 
-    background:#f0f4f8;
-    margin:0;
+body {
+  font-family: "Arial","Noto Sans TC",sans-serif;
+  background: #f0f4f8;
+  display: flex;
+  justify-content: center;
+  padding: 20px;
+  margin: 0;
 }
-#controlPanel {
-    background:white;
-    padding:25px 20px;
-    border-radius:15px;
-    box-shadow:0 8px 20px rgba(0,0,0,0.1);
-    width:95%;
-    max-width:480px;
-    display:flex;
-    flex-direction:column;
-    gap:20px;
-    align-items:center;
-    box-sizing:border-box;
+
+.card {
+  background: #fff;
+  width: 95%;
+  max-width: 480px;
+  border-radius: 20px;
+  padding: 25px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  box-shadow: 0 15px 30px rgba(0,0,0,0.15);
 }
-#userInfo { text-align:center; font-size:26px; font-weight:bold; }
-#statusInfo { 
-    text-align:center; font-size:20px; 
-    padding:8px 20px; 
-    border-radius:20px; 
-    display:inline-block; 
-    min-width:200px;
+
+#userInfo {
+  font-size: 28px;
+  font-weight: bold;
+  text-align: center;
+  color: #2c3e50;
 }
-#dateTime { text-align:center; font-size:22px; }
+
+#dateTime {
+  font-size: 22px;
+  color: #7f8c8d;
+  text-align: center;
+}
+
+#statusInfo {
+  font-size: 20px;
+  color: white;
+  padding: 8px 25px;
+  border-radius: 25px;
+  text-align: center;
+  min-width: 180px;
+}
+
 .buttons-container {
-    display:flex;
-    gap:10px;
-    width:100%;
+  display: flex;
+  gap: 15px;
+  width: 100%;
 }
-.buttons-container button { 
-    flex:1 1 0; 
-    min-width:80px;
-    padding:12px 0; 
-    font-size:25px; 
-    border-radius:8px; 
-    cursor:pointer; 
-    font-weight:bold; 
-    border:none;
-    transition: all 0.2s ease;
+
+.buttons-container button {
+  flex: 1;
+  padding: 15px 0;
+  font-size: 22px;
+  font-weight: bold;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  color: white;
+  transition: all 0.2s;
 }
-.buttons-container button:hover{
-    transform: translateY(-2px);
-    box-shadow: 0 6px 12px rgba(0,0,0,0.1);
-}
-.buttons-container button:active{
-    transform: translateY(1px);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
-}
-#btnStart { background: linear-gradient(145deg, #3498db, #2980b9); color:white; } 
-#btnEnd { background: linear-gradient(145deg, #2ecc71, #27ae60); color:white; }   
-#btnMakeup { background: linear-gradient(145deg, #f39c12, #d35400); color:white; } 
-#countdownWrapper { width:120px; height:120px; position:relative; display:none; }
-#circleProgress { fill:none; stroke-width:12; stroke-linecap:round; transform: rotate(-90deg); transform-origin: 50% 50%; stroke:#3498db;}
-#countdownText { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-weight:bold; white-space:nowrap; text-align:center; }
-#querySection { width:100%; display:flex; flex-direction:column; gap:10px; }
-#querySection .queryRow { display:flex; gap:10px; width:100%; flex-wrap:nowrap; align-items:center; }
-#querySection input[type="date"] {
-    flex:1 1 auto; 
-    min-width:100px;
-    padding:8px 10px; 
-    font-size:14px; 
-    border-radius:6px; 
-    border:1px solid #ccc;
-    box-sizing:border-box;
-}
-#querySection button {
-    flex:1 1 0; 
-    padding:8px 0;
-    font-size:14px;
-    font-weight:bold;
-    border-radius:6px;
-    border:none;
-    cursor:pointer;
-    white-space:nowrap;
-}
-#btnQuery { background:#d3d3d3; color:black; }  
-#btnReturn { background:#d3d3d3; color:black; }  
+#btnStart { background: linear-gradient(135deg, #3498db, #2980b9); }
+#btnEnd { background: linear-gradient(135deg, #2ecc71, #27ae60); }
+
 #todayRecords {
-    border:1px solid #ccc; 
-    border-radius:8px; 
-    padding:10px; 
-    min-height:50px; 
-    font-size:16px; 
-    background: #fafafa;
-    width:100%; 
-    box-sizing:border-box;
+  width: 100%;
+  background: #fafafa;
+  border-radius: 14px;
+  padding: 15px;
+  border: 1px solid #ddd;
+  font-size: 18px;
+  text-align: left;
 }
-#btnApprove {
-    margin-top:10px;
-    padding:12px 20px;
-    font-size:18px;
-    font-weight:bold;
-    border-radius:10px;
-    background:linear-gradient(145deg,#8e44ad,#663399);
-    color:white;
-    display:none;
-    width:100%;
-    cursor:pointer;
-    border:none;
-}
-#btnApprove:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-}
-@media(max-width:400px){
-    .buttons-container button{ font-size:20px; }
-    #querySection input[type="date"]{ font-size:13px; }
-    #querySection button{ font-size:13px; }
+#todayRecords span {
+  display: block;
+  margin-bottom: 5px;
+  padding-left: 5px;
+  border-left: 3px solid #3498db;
 }
 </style>
 </head>
 <body>
-<div id="controlPanel">
-    <div id="userInfo">載入使用者資訊中...</div>
-    <div id="statusInfo">載入中…</div>
-    <div id="dateTime">載入中…</div>
+<div class="card">
+  <div id="userInfo">載入使用者資訊中...</div>
+  <div id="dateTime">載入中…</div>
 
-    <div class="buttons-container">
-        <button id="btnStart">上班</button>
-        <button id="btnEnd">下班</button>
-        
-    </div>
+  <div id="statusInfo">檢查中…</div>
 
-    <div id="countdownWrapper">
-        <svg width="120" height="120">
-            <circle id="circleProgress" cx="60" cy="60" r="50"></circle>
-        </svg>
-        <div id="countdownText">打卡中...</div>
-    </div>
+  <div class="buttons-container">
+    <button id="btnStart">上班</button>
+    <button id="btnEnd">下班</button>
+  </div>
 
-        <div id="todayRecords">今日打卡紀錄：</div>
-    </div>
-
-   
+  <div id="todayRecords">今日打卡紀錄（點擊更新）</div>
 </div>
 
 <script>
 const API_ENDPOINT = "https://script.google.com/macros/s/AKfycbznYlglXsowIjw2yR5t8i8rauJpDiYX97nt6cjJ0ymd6KZcvJ-6hGcI-x-5M4Y77vNs/exec";
 let userId="", userName="";
 
+// 初始化使用者
 async function initUser(){
   await liff.init({liffId:"2008504718-nmXP0WRV"});
   if(!liff.isLoggedIn()) await liff.login();
@@ -162,6 +117,7 @@ async function initUser(){
   document.getElementById("userInfo").textContent = `${userName} 您好`;
 }
 
+// 更新時間
 function updateDateTime(){
   const now = new Date();
   document.getElementById("dateTime").textContent = now.toLocaleString("zh-TW",{hour12:false});
@@ -169,6 +125,7 @@ function updateDateTime(){
 setInterval(updateDateTime,1000);
 updateDateTime();
 
+// 取得 IP
 async function getIP(){
   const cache = sessionStorage.getItem("myIP");
   if(cache) return cache;
@@ -180,101 +137,346 @@ async function getIP(){
   }catch{return "";}
 }
 
-async function updateStatus(gps){
+// 更新打卡狀態顯示
+async function updateStatus(){
   const ip = await getIP();
-  try{
-    const res = await fetch(`${API_ENDPOINT}?action=check&lat=${gps.lat}&lng=${gps.lng}&ip=${ip}`);
-    const data = await res.json();
-    const statusEl = document.getElementById("statusInfo");
+  if(!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    const gps={lat:pos.coords.latitude,lng:pos.coords.longitude};
+    try{
+      const res = await fetch(`${API_ENDPOINT}?action=check&lat=${gps.lat}&lng=${gps.lng}&ip=${ip}`);
+      const data = await res.json();
 
-    if(data.ipMatched || (data.distance !== null && data.distance <= data.nearestCompany.allow)){
-      statusEl.textContent = "打卡有效範圍";
-      statusEl.style.background = "linear-gradient(135deg, #2ecc71, #27ae60)";
-    } else {
-      let dist = data.distance !== null ? Math.round(data.distance) : "?";
-      statusEl.textContent = `打卡無效區（異地請忽略，距離 ${dist} 公尺）`;
-      statusEl.style.background = "linear-gradient(135deg, #e74c3c, #c0392b)";
+      const statusEl = document.getElementById("statusInfo");
+      if(data.rangeStatus==="可打卡範圍"){
+        statusEl.style.background="#2ecc71";
+        statusEl.textContent="可打卡範圍";
+      } else {
+        statusEl.style.background="#e74c3c";
+        const distText = data.distance !== null ? ` (${data.distance} 公尺)` : "";
+        statusEl.textContent="非打卡範圍" + distText;
+      }
+    }catch(err){
+      console.error(err);
     }
-    statusEl.style.color = "white";
-  }catch(err){ console.log(err); }
+  });
 }
+setInterval(updateStatus,5000);
+updateStatus();
 
+// 今日打卡紀錄
 async function updateTodayRecords(){
   const today = new Date().toLocaleDateString("zh-TW",{timeZone:"Asia/Taipei"}).replace(/\//g,"-");
-  const container = document.getElementById("todayRecords");
-  container.innerHTML = "載入中...";
+  const container=document.getElementById("todayRecords");
+  container.innerHTML="載入中...";
   try{
     const res = await fetch(`${API_ENDPOINT}?action=getToday&userId=${userId}&date=${today}`);
     const data = await res.json();
-    if(!data.length){ container.innerHTML="今日打卡紀錄：無"; return; }
+    if(!data.length){container.innerHTML="今日打卡紀錄：無"; return;}
     container.innerHTML = "今日打卡紀錄：<br>";
     data.forEach(r=>{
-      container.innerHTML += `<span>${r.status} ${r.time}（${r.company}）</span><br>`;
+      container.innerHTML += `<span>${r.status}：${r.time}（${r.company}）</span>`;
     });
   }catch{
     container.innerHTML="今日打卡紀錄：讀取失敗";
   }
 }
 
-function startCountdown(){
-  const wrapper = document.getElementById("countdownWrapper");
-  const circle = document.getElementById("circleProgress");
-  const text = document.getElementById("countdownText");
-  wrapper.style.display="block";
-  let duration = 3; 
-  let elapsed = 0;
-  const radius = 50;
-  const circumference = 2*Math.PI*radius;
-  circle.style.strokeDasharray = circumference;
-  circle.style.strokeDashoffset = circumference;
-  const interval = setInterval(()=>{
-    elapsed++;
-    const offset = circumference*(1 - elapsed/duration);
-    circle.style.strokeDashoffset = offset;
-    if(elapsed>=duration) { clearInterval(interval); wrapper.style.display="none"; }
-  },1000);
-}
-
-async function clock(status){
-  const btn = status==="上班"? document.getElementById("btnStart") : document.getElementById("btnEnd");
-  btn.disabled=true;
-  startCountdown();
-
+// 打卡功能
+async function clockInOut(status){
+  const btn = status==="上班" ? document.getElementById("btnStart") : document.getElementById("btnEnd");
+  btn.disabled = true;
   const ip = await getIP();
   if(!navigator.geolocation){ Swal.fire("⚠ 無法取得位置"); btn.disabled=false; return; }
   navigator.geolocation.getCurrentPosition(async pos=>{
     const gps={lat:pos.coords.latitude,lng:pos.coords.longitude};
-    const res = await fetch(API_ENDPOINT,{
-      method:"POST",
-      body:JSON.stringify({userId,userName,ip,gps,status})
-    });
-    const data = await res.json();
-    Swal.fire({icon:"success",title:data.message,html:`${data.date} ${data.time}`,timer:2000,showConfirmButton:false});
-    updateTodayRecords();
-    updateStatus(gps);
-    btn.disabled=false;
-  }, err=>{
-    Swal.fire("⚠ 無法取得GPS位置"); 
-    btn.disabled=false;
-  });
+    try{
+      const res = await fetch(API_ENDPOINT,{
+        method:"POST",
+        body: JSON.stringify({userId,userName,ip,gps,status})
+      });
+      const data = await res.json();
+      Swal.fire({icon:"success",title:data.message,html:`${data.date} ${data.time}`,timer:2000,showConfirmButton:false});
+      updateTodayRecords();
+      updateStatus();
+    }catch(err){
+      Swal.fire("⚠ 打卡失敗");
+    } finally {
+      btn.disabled=false;
+    }
+  }, err=>{Swal.fire("⚠ 無法取得GPS位置"); btn.disabled=false;});
 }
 
-document.getElementById("btnStart").onclick=()=>clock("上班");
-document.getElementById("btnEnd").onclick=()=>clock("下班");
-document.getElementById("btnMakeup").onclick=()=>Swal.fire("補打卡功能未啟用");
+document.getElementById("btnStart").onclick = ()=>clockInOut("上班");
+document.getElementById("btnEnd").onclick = ()=>clockInOut("下班");
 
-window.onload=async ()=>{
+window.onload = async ()=>{
   await initUser();
   updateTodayRecords();
-  if(navigator.geolocation){
-    navigator.geolocation.getCurrentPosition(pos=>{
-      updateStatus({lat:pos.coords.latitude,lng:pos.coords.longitude});
-    });
-  }
 };
 </script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
