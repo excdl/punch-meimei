@@ -79,7 +79,7 @@ body {
 #btnStart { background: linear-gradient(145deg, #3498db, #2980b9); color:white; } 
 #btnEnd { background: linear-gradient(145deg, #2ecc71, #27ae60); color:white; }   
 
-/* 倒數動畫 */
+/* 圓形倒數動畫 */
 #countdownWrapper { 
     width:120px; 
     height:120px; 
@@ -92,6 +92,10 @@ body {
     stroke-linecap:round; 
     transform: rotate(-90deg); 
     transform-origin: 50% 50%; 
+    stroke-dasharray: 314; /* 2 * PI * 50 */
+    stroke-dashoffset: 314;
+    transition: stroke-dashoffset 1s linear;
+    stroke: #3498db;
 }
 #countdownText { 
     position:absolute; 
@@ -218,7 +222,7 @@ async function updateTodayRecords(){
     }
 }
 
-// 打卡功能 + 圓形倒數動畫
+// 打卡功能 + 圓形倒數動畫（順時針漸滿）
 async function clockIn(status){
     const ip = await getIP();
     if(!navigator.geolocation){ Swal.fire("⚠ 無法取得位置"); return; }
@@ -231,22 +235,23 @@ async function clockIn(status){
     // 顯示倒數動畫
     const countdownWrapper = document.getElementById("countdownWrapper");
     const circle = document.getElementById("circleProgress");
+    const text = document.getElementById("countdownText");
     countdownWrapper.style.display = "block";
 
-    let duration = 2; 
-    let timeLeft = duration;
-    const radius = 50;
-    const circumference = 2 * Math.PI * radius;
-    circle.style.stroke = "#3498db";
+    const duration = 3; // 3秒倒數
+    let elapsed = 0;
+    const circumference = 2 * Math.PI * 50; // r=50
     circle.style.strokeDasharray = circumference;
     circle.style.strokeDashoffset = circumference;
 
     const interval = setInterval(()=>{
-        const offset = circumference * (1 - timeLeft/duration);
-        circle.style.strokeDashoffset = offset;
-        document.getElementById("countdownText").textContent = `打卡中… ${timeLeft}s`;
-        timeLeft--;
-        if(timeLeft < 0) clearInterval(interval);
+        elapsed++;
+        const progress = elapsed / duration;
+        circle.style.strokeDashoffset = circumference * (1 - progress);
+        text.textContent = `打卡中… ${duration - elapsed}s`;
+        if(elapsed >= duration){
+            clearInterval(interval);
+        }
     }, 1000);
 
     navigator.geolocation.getCurrentPosition(async pos=>{
