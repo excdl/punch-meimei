@@ -4,33 +4,122 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>LINE 打卡</title>
+
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
 <style>
-body{margin:0;background:#f4f6f9;font-family:Arial;display:flex;justify-content:center}
-.card{background:#fff;width:95%;max-width:420px;padding:25px;border-radius:20px;
-box-shadow:0 8px 20px rgba(0,0,0,.15);text-align:center}
-.clock{width:140px;height:140px;border-radius:50%;border:none;font-size:26px;
-font-weight:bold;color:#fff;background:#3498db}
-.statusBox{display:flex;gap:10px;margin:10px 0}
-.status{flex:1;padding:10px;border-radius:10px;font-weight:bold}
-.ok{background:#2ecc71;color:#fff}
-.fail{background:#e74c3c;color:#fff}
+body{
+  margin:0;
+  background:#f4f6f9;
+  font-family:Arial;
+  display:flex;
+  justify-content:center;
+}
+
+.card{
+  background:#fff;
+  width:95%;
+  max-width:420px;
+  padding:24px;
+  border-radius:20px;
+  box-shadow:0 10px 25px rgba(0,0,0,.15);
+  text-align:center;
+}
+
+/* ===== 使用者 ===== */
+#user{
+  font-size:22px;
+  font-weight:bold;
+}
+
+#now{
+  font-size:18px;
+  margin:6px 0 14px;
+}
+
+/* ===== 狀態區 ===== */
+.company{
+  font-size:20px;
+  font-weight:bold;
+  margin-bottom:6px;
+}
+
+.range{
+  font-size:18px;
+  padding:10px;
+  border-radius:12px;
+  margin-bottom:16px;
+}
+
+.ok{
+  background:#2ecc71;
+  color:#fff;
+}
+
+.fail{
+  background:#e74c3c;
+  color:#fff;
+}
+
+/* ===== 打卡按鈕 ===== */
+.clock{
+  width:150px;
+  height:150px;
+  border-radius:50%;
+  border:none;
+  font-size:26px;
+  font-weight:bold;
+  color:#fff;
+  background:linear-gradient(145deg,#4facfe,#00c6fb);
+  box-shadow:0 8px 0 #1f78c1, 0 12px 20px rgba(0,0,0,.3);
+  cursor:pointer;
+  transition:.2s;
+}
+
+.clock:active{
+  transform:translateY(6px);
+  box-shadow:0 2px 0 #1f78c1;
+}
+
+.clock.loading{
+  background:#95a5a6;
+  box-shadow:none;
+  cursor:not-allowed;
+}
+
+/* ===== 今日紀錄 ===== */
+#todayBox{
+  margin-top:20px;
+  padding:14px;
+  border-radius:14px;
+  border:2px dashed #bbb;
+  text-align:left;
+  cursor:pointer;
+}
+
+#todayTitle{
+  font-weight:bold;
+  margin-bottom:6px;
+}
 </style>
 </head>
+
 <body>
 
 <div class="card">
-  <h2 id="user">載入中</h2>
+  <div id="user">載入中</div>
   <div id="now"></div>
 
-  <div class="statusBox">
-    <div id="company" class="status">定位中</div>
-    <div id="range" class="status">判斷中</div>
-  </div>
+  <div id="company" class="company">定位中</div>
+  <div id="range" class="range">判斷中</div>
 
-  <button class="clock" onclick="clock()">打卡</button>
-  <div id="today">今日打卡紀錄：</div>
+  <button id="clockBtn" class="clock" onclick="clock()">打卡</button>
+
+  <div id="todayBox" onclick="loadToday()">
+    <div id="todayTitle">今日打卡紀錄（點擊更新）</div>
+    <div id="today">載入中</div>
+  </div>
 </div>
 
 <script>
@@ -39,40 +128,77 @@ let userId="",userName="";
 
 liff.init({liffId:"2008504718-nmXP0WRV"}).then(async()=>{
   if(!liff.isLoggedIn()) liff.login();
-  const p=await liff.getProfile();
-  userId=p.userId; userName=p.displayName;
-  user.textContent=`${userName} 您好`;
+  const p = await liff.getProfile();
+  userId = p.userId;
+  userName = p.displayName;
+  user.textContent = `${userName} 您好`;
   loadToday();
 });
 
-setInterval(()=>now.textContent=new Date().toLocaleString("zh-TW",{hour12:false}),1000);
+/* ===== 時間 ===== */
+setInterval(()=>{
+  now.textContent = new Date().toLocaleString("zh-TW",{hour12:false});
+},1000);
 
+/* ===== 狀態更新 ===== */
 async function updateStatus(){
   if(!navigator.geolocation) return;
+
   navigator.geolocation.getCurrentPosition(async pos=>{
     const gps={lat:pos.coords.latitude,lng:pos.coords.longitude};
     const ip=(await fetch("https://api.ipify.org?format=json").then(r=>r.json())).ip;
-    const res=await fetch(`${API}?action=check&lat=${gps.lat}&lng=${gps.lng}&ip=${ip}`);
+
+    const res=await fetch(
+      `${API}?action=check&lat=${gps.lat}&lng=${gps.lng}&ip=${ip}`
+    );
     const d=await res.json();
-    company.textContent=d.nearestCompany?d.nearestCompany.name:"未知";
-    range.textContent=d.rangeStatus;
-    range.className="status "+(d.rangeStatus.includes("可")?"ok":"fail");
+
+    company.textContent = d.nearestCompany ? d.nearestCompany.name : "未知位置";
+
+    range.textContent =
+      d.rangeStatus + (d.distance!=null ? `（${d.distance.toFixed(0)} 公尺）` : "");
+
+    range.className = "range " + (d.rangeStatus.includes("可")?"ok":"fail");
   });
 }
 setInterval(updateStatus,5000);
 updateStatus();
 
+/* ===== 打卡 ===== */
 async function clock(){
+  const btn = document.getElementById("clockBtn");
+  if(btn.classList.contains("loading")) return;
+
+  btn.classList.add("loading");
+  btn.textContent = "打卡中";
+
   navigator.geolocation.getCurrentPosition(async pos=>{
-    const gps={lat:pos.coords.latitude,lng:pos.coords.longitude};
-    const ip=(await fetch("https://api.ipify.org?format=json").then(r=>r.json())).ip;
-    const res=await fetch(API,{method:"POST",body:JSON.stringify({userId,userName,ip,gps})});
-    const d=await res.json();
-    Swal.fire(d.message,"","success");
-    loadToday();
-  },()=>Swal.fire("無法取得 GPS","請開啟定位","error"));
+    try{
+      const gps={lat:pos.coords.latitude,lng:pos.coords.longitude};
+      const ip=(await fetch("https://api.ipify.org?format=json").then(r=>r.json())).ip;
+
+      const res=await fetch(API,{
+        method:"POST",
+        body:JSON.stringify({userId,userName,ip,gps})
+      });
+      const d=await res.json();
+
+      Swal.fire(d.message,"","success");
+      loadToday();
+    }catch{
+      Swal.fire("打卡失敗","","error");
+    }finally{
+      btn.classList.remove("loading");
+      btn.textContent="打卡";
+    }
+  },()=>{
+    Swal.fire("無法取得 GPS","","error");
+    btn.classList.remove("loading");
+    btn.textContent="打卡";
+  });
 }
 
+/* ===== 今日 ===== */
 function today(){
   const d=new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
@@ -81,15 +207,14 @@ function today(){
 async function loadToday(){
   const res=await fetch(`${API}?action=getToday&userId=${userId}&date=${today()}`);
   const d=await res.json();
-  todayDiv=document.getElementById("today");
-  todayDiv.innerHTML="今日打卡紀錄：<br>"+(d.length?d.map(x=>`• ${x.status} ${x.time}（${x.company}）`).join("<br>"):"無");
+  today.innerHTML = d.length
+    ? d.map(x=>`• ${x.status} ${x.time}（${x.company}）`).join("<br>")
+    : "無";
 }
 </script>
 
 </body>
 </html>
-
-
 
 
 
