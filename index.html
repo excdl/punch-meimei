@@ -177,6 +177,7 @@ async function updateTodayRecords(){
 }
 
 // ✅ 打卡功能（立即打卡 + 按鈕顯示倒數）
+// ✅ 打卡功能（立即打卡 + 按鈕倒數 + 放大文字）
 async function clockInOut(status) {
   const btn = status === "上班" ? document.getElementById("btnStart") : document.getElementById("btnEnd");
   btn.disabled = true;
@@ -199,7 +200,7 @@ async function clockInOut(status) {
     btn.disabled = false;
 
     Swal.fire({
-      html: '<span style="font-size:1em; color:red;">❌ 打卡失敗</span>'
+      html: '<span style="font-size:2em; color:red;">❌ 打卡失敗</span>'
     });
     return;
   }
@@ -220,7 +221,7 @@ async function clockInOut(status) {
         if (data.rangeStatus === "有效打卡區") {
           // ✅ 情境 1
           Swal.fire({
-            html: '<span style="font-size:1em; color:green;">✅ 打卡成功</span>',
+            html: `<span style="font-size:2em; color:green;">✅ 打卡成功</span>`,
             timer: 2000,
             showConfirmButton: false
           });
@@ -228,7 +229,7 @@ async function clockInOut(status) {
         } else if (data.rangeStatus === "無效打卡區") {
           // ⚠️ 情境 2
           Swal.fire({
-            html: '<span style="font-size:0.8em;">⚠ 請勿在無效打卡區內進行打卡<br>(異地請忽略)</span>',
+            html: `<span style="font-size:1.6em;">⚠ 請勿在無效打卡區內進行打卡<br>(異地請忽略)</span>`,
             timer: 3000,
             showConfirmButton: false
           });
@@ -240,7 +241,7 @@ async function clockInOut(status) {
       } catch {
         // ❌ 打卡失敗
         Swal.fire({
-          html: '<span style="font-size:1em; color:red;">❌ 打卡失敗</span>'
+          html: '<span style="font-size:2em; color:red;">❌ 打卡失敗</span>'
         });
       } finally {
         clearInterval(timer);
@@ -256,11 +257,12 @@ async function clockInOut(status) {
       btn.disabled = false;
 
       Swal.fire({
-        html: '<span style="font-size:1em; color:red;">❌ 無法取得GPS位置</span>'
+        html: '<span style="font-size:2em; color:red;">❌ 無法取得GPS位置</span>'
       });
     }
   );
 }
+
 
 
 document.getElementById("btnStart").onclick=()=>clockInOut("上班");
