@@ -9,69 +9,18 @@
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
 <style>
-body{
-  font-family:"Arial","Noto Sans TC",sans-serif;
-  background:#f0f4f8;
-  display:flex;
-  justify-content:center;
-  padding:20px;
-  margin:0;
-}
-.card{
-  background:#fff;
-  width:95%;
-  max-width:480px;
-  border-radius:20px;
-  padding:25px 20px;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  gap:20px;
-  box-shadow:0 15px 30px rgba(0,0,0,.15);
-}
+body{font-family:"Arial","Noto Sans TC",sans-serif;background:#f0f4f8;display:flex;justify-content:center;padding:20px;margin:0}
+.card{background:#fff;width:95%;max-width:480px;border-radius:20px;padding:25px 20px;display:flex;flex-direction:column;align-items:center;gap:20px;box-shadow:0 15px 30px rgba(0,0,0,.15)}
 #userInfo{font-size:26px;font-weight:bold;color:#2c3e50}
 #dateTime{font-size:20px;color:#7f8c8d}
-#statusInfo{
-  font-size:18px;
-  color:white;
-  padding:8px 25px;
-  border-radius:25px;
-  min-width:180px;
-  text-align:center;
-}
-.buttons-container{
-  display:flex;
-  gap:15px;
-  width:100%;
-}
-.buttons-container button{
-  flex:1;
-  padding:15px 0;
-  font-size:22px;
-  font-weight:bold;
-  border-radius:12px;
-  border:none;
-  color:white;
-  cursor:pointer;
-}
+#statusInfo{font-size:18px;color:white;padding:8px 25px;border-radius:25px;min-width:180px;text-align:center}
+.buttons-container{display:flex;gap:15px;width:100%}
+.buttons-container button{flex:1;padding:15px 0;font-size:22px;font-weight:bold;border-radius:12px;border:none;color:white;cursor:pointer}
 button:disabled{opacity:.5;cursor:not-allowed}
 #btnStart{background:linear-gradient(135deg,#3498db,#2980b9)}
 #btnEnd{background:linear-gradient(135deg,#2ecc71,#27ae60)}
-
-#todayRecords{
-  width:100%;
-  background:#fafafa;
-  border-radius:14px;
-  padding:15px;
-  border:1px solid #ddd;
-  font-size:17px;
-}
-#todayRecords span{
-  display:block;
-  margin-bottom:5px;
-  padding-left:6px;
-  border-left:3px solid #3498db;
-}
+#todayRecords{width:100%;background:#fafafa;border-radius:14px;padding:15px;border:1px solid #ddd;font-size:17px}
+#todayRecords span{display:block;margin-bottom:5px;padding-left:6px;border-left:3px solid #3498db}
 </style>
 </head>
 
@@ -90,29 +39,31 @@ button:disabled{opacity:.5;cursor:not-allowed}
 </div>
 
 <script>
-/* ========= 基本設定 ========= */
-const API_ENDPOINT = "https://script.google.com/macros/s/AKfycbzmiYZPRcsliCLaCARTIhBNYAB4oRjB4rKUczOBn8QjKt71lxbylQ1t-w24obpR4dNI/exec";
-let userId="", userName="";
-let dataReady=false;
+const API_ENDPOINT="https://script.google.com/macros/s/AKfycbzmiYZPRcsliCLaCARTIhBNYAB4oRjB4rKUczOBn8QjKt71lxbylQ1t-w24obpR4dNI/exec";
+let userId="",userName="",dataReady=false;
 
-/* ========= 工具 ========= */
+const btnStart=document.getElementById("btnStart");
+const btnEnd=document.getElementById("btnEnd");
+const userInfo=document.getElementById("userInfo");
+const statusInfo=document.getElementById("statusInfo");
+const dateTime=document.getElementById("dateTime");
+const todayRecords=document.getElementById("todayRecords");
+
+/* ===== 日期字串 yyyy/MM/dd ===== */
 function getTodayString(){
   const d=new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-}
-function setButtonsLock(lock){
-  btnStart.disabled=lock;
-  btnEnd.disabled=lock;
+  return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getDate()).padStart(2,"0")}`;
 }
 
-/* ========= 時間顯示 ========= */
-function updateDateTime(){
-  dateTime.textContent=new Date().toLocaleString("zh-TW",{hour12:false});
-}
+/* ===== 按鈕鎖定 ===== */
+function setButtonsLock(lock){btnStart.disabled=lock;btnEnd.disabled=lock}
+
+/* ===== 時間顯示 ===== */
+function updateDateTime(){dateTime.textContent=new Date().toLocaleString("zh-TW",{hour12:false})}
 setInterval(updateDateTime,1000);
 updateDateTime();
 
-/* ========= IP ========= */
+/* ===== IP ===== */
 async function getIP(){
   const cache=sessionStorage.getItem("myIP");
   if(cache) return cache;
@@ -124,27 +75,21 @@ async function getIP(){
   }catch{return "";}
 }
 
-/* ========= GPS 快取 ========= */
+/* ===== GPS 快取 ===== */
 let lastGPS=null,lastGPSAt=0;
 function getCachedGPS(maxAge=15000){
   return new Promise((resolve,reject)=>{
     const now=Date.now();
-    if(lastGPS && now-lastGPSAt<maxAge){
-      resolve(lastGPS);return;
-    }
+    if(lastGPS && now-lastGPSAt<maxAge){resolve(lastGPS);return;}
     navigator.geolocation.getCurrentPosition(
-      p=>{
-        lastGPS={lat:p.coords.latitude,lng:p.coords.longitude};
-        lastGPSAt=Date.now();
-        resolve(lastGPS);
-      },
+      p=>{lastGPS={lat:p.coords.latitude,lng:p.coords.longitude};lastGPSAt=Date.now();resolve(lastGPS)},
       e=>reject(e),
       {enableHighAccuracy:false,timeout:5000}
     );
   });
 }
 
-/* ========= LIFF ========= */
+/* ===== LIFF ===== */
 async function initUser(){
   await liff.init({liffId:"2008786085-L1CtKqqv"});
   if(!liff.isLoggedIn()) await liff.login();
@@ -154,7 +99,7 @@ async function initUser(){
   userInfo.textContent=`${userName} 您好`;
 }
 
-/* ========= 狀態 ========= */
+/* ===== 狀態更新 ===== */
 async function updateStatus(){
   try{
     const ip=await getIP();
@@ -162,38 +107,24 @@ async function updateStatus(){
     const r=await fetch(`${API_ENDPOINT}?action=check&lat=${gps.lat}&lng=${gps.lng}&ip=${ip}`);
     const d=await r.json();
     statusInfo.style.background=d.rangeStatus==="有效打卡區"?"#2ecc71":"#e74c3c";
-    statusInfo.textContent=d.rangeStatus==="有效打卡區"
-      ?"有效打卡區"
-      :`無效打卡區${d.distance?` (${d.distance} 公尺)`:""}`;
+    statusInfo.textContent=d.rangeStatus==="有效打卡區"?"有效打卡區":`無效打卡區${d.distance?` (${d.distance} 公尺)`:""}`;
   }catch{}
 }
 
-/* ========= 今日紀錄 ========= */
+/* ===== 今日紀錄 ===== */
 async function updateTodayRecords(){
   todayRecords.textContent="載入中...";
   try{
     const r=await fetch(`${API_ENDPOINT}?action=getToday&userId=${userId}&date=${getTodayString()}`);
     const data=await r.json();
-    if(!data.length){
-      todayRecords.textContent="今日打卡紀錄：無";
-      return;
-    }
-    todayRecords.innerHTML=[
-      "今日打卡紀錄：<br>",
-      ...data.map(x=>`<span>${x.status}：${x.time}（${x.company}）</span>`)
-    ].join("");
-  }catch{
-    todayRecords.textContent="讀取失敗";
-  }
+    if(!data.length){todayRecords.textContent="今日打卡紀錄：無";return;}
+    todayRecords.innerHTML=["今日打卡紀錄：<br>",...data.map(x=>`<span>${x.status}：${x.time}（${x.company}）</span>`)].join("");
+  }catch{todayRecords.textContent="讀取失敗";}
 }
 
-/* ========= 打卡 ========= */
+/* ===== 打卡 ===== */
 async function clockInOut(status){
-  if(!dataReady){
-    Swal.fire({icon:"info",title:"資料讀取中",timer:1500,showConfirmButton:false});
-    return;
-  }
-
+  if(!dataReady){Swal.fire({icon:"info",title:"資料讀取中",timer:1500,showConfirmButton:false});return;}
   const btn=status==="上班"?btnStart:btnEnd;
   btn.disabled=true;
   const txt=btn.textContent;
@@ -203,41 +134,20 @@ async function clockInOut(status){
   try{
     const ip=await getIP();
     const gps=await getCachedGPS();
-    const r=await fetch(API_ENDPOINT,{
-      method:"POST",
-      body:JSON.stringify({userId,userName,ip,gps,status})
-    });
+    const r=await fetch(API_ENDPOINT,{method:"POST",body:JSON.stringify({userId,userName,ip,gps,status})});
     const d=await r.json();
-
-    Swal.fire({
-      icon:d.rangeStatus==="有效打卡區"?"success":"warning",
-      title:d.rangeStatus==="有效打卡區"?"🎉 打卡成功":"⚠ 打卡無效",
-      timer:2000,
-      showConfirmButton:false
-    });
-
-    updateTodayRecords();
-    updateStatus();
-  }catch{
-    Swal.fire({icon:"error",title:"打卡失敗",timer:2000,showConfirmButton:false});
-  }finally{
-    clearInterval(t);
-    btn.textContent=txt;
-    btn.disabled=false;
-  }
+    Swal.fire({icon:d.rangeStatus==="有效打卡區"?"success":"warning",title:d.rangeStatus==="有效打卡區"?"🎉 打卡成功":"⚠ 打卡無效",timer:2000,showConfirmButton:false});
+    updateTodayRecords();updateStatus();
+  }catch{Swal.fire({icon:"error",title:"打卡失敗",timer:2000,showConfirmButton:false});}
+  finally{clearInterval(t);btn.textContent=txt;btn.disabled=false;}
 }
 
-/* ========= 啟動 ========= */
 btnStart.onclick=()=>clockInOut("上班");
 btnEnd.onclick=()=>clockInOut("下班");
 
 window.onload=async()=>{
   setButtonsLock(true);
-  await Promise.all([
-    initUser(),
-    updateTodayRecords(),
-    updateStatus()
-  ]);
+  await Promise.all([initUser(),updateTodayRecords(),updateStatus()]);
   dataReady=true;
   setButtonsLock(false);
   setInterval(updateStatus,15000);
@@ -245,6 +155,7 @@ window.onload=async()=>{
 </script>
 </body>
 </html>
+
 
 
 
