@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!DOCTYPE html> 
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
@@ -30,11 +30,11 @@ button:disabled {opacity:0.5;cursor:not-allowed;}
     <button id="btnStart" disabled>上班</button>
     <button id="btnEnd" disabled>下班</button>
   </div>
-  <div id="todayRecords">今日打卡紀錄（點擊刷新）</div>
+  <div id="todayRecords">今日打卡紀錄（點擊更新）</div>
 </div>
 
 <script>
-const API_ENDPOINT="https://script.google.com/macros/s/AKfycbyvjio1hNQLv1IdPQztODkd3AjPuzO4-qjDbnbIW62TJGdb7IZTlpHPjRPRRRN-daiE/exec";
+const API_ENDPOINT="https://script.google.com/macros/s/AKfycbxSWjcCGStMxBSHvo7hOT6pPWiH6DEH4x1Nvz8DtFcQyFAXBN2NJ1k2rOE8koNZCqNB/exec";
 let userId="", userName="", dataReady=false;
 let statusLoaded=false;
 
@@ -127,43 +127,32 @@ async function updateStatus(){
   }
 }
 
-/* ===== 時間格式化函數 HH:mm:ss ===== */
-function formatTime(dateStr){
-  const d = new Date(dateStr);
-  return d.toLocaleTimeString("zh-TW",{hour12:false});
-}
-
 /* ===== 更新今日打卡紀錄 ===== */
 async function updateTodayRecords(){
-  todayRecords.innerHTML = "載入中...";
+  todayRecords.innerHTML="載入中...";
   try{
-    const res = await fetch(`${API_ENDPOINT}?action=getToday&userId=${userId}&date=${getTodayString()}`);
-    const data = await res.json();
-    if(!data.length){
-      todayRecords.innerHTML = "今日打卡紀錄：無";
-      return;
-    }
-
-    todayRecords.innerHTML = "今日打卡紀錄：<br>";
+    const res=await fetch(`${API_ENDPOINT}?action=getToday&userId=${userId}&date=${getTodayString()}`);
+    const data=await res.json();
+    if(!data.length){todayRecords.innerHTML="今日打卡紀錄：無";return;}
+    todayRecords.innerHTML="今日打卡紀錄：<br>";
     data.forEach(r=>{
-      let color = "#3498db"; // 上班藍
-      if(r.status==="下班") color = "#2ecc71"; // 下班綠
-      if(r.company.includes("錯誤")) color = "#e67e22"; // 異常橘
-
-      const timeOnly = formatTime(r.time);
-      todayRecords.innerHTML += `<span style="border-left-color:${color}">${r.status}：${timeOnly}（${r.company}）</span>`;
+      let color="#3498db"; // 上班藍
+      if(r.status==="下班") color="#2ecc71"; // 下班綠
+      if(r.company.includes("錯誤")) color="#e67e22"; // 異常橘
+      todayRecords.innerHTML+=`<span style="border-left-color:${color}">${r.status}：${r.time}（${r.company}）</span>`;
     });
-  }catch{
-    todayRecords.innerHTML = "今日打卡紀錄：讀取失敗";
-  }
+  }catch{todayRecords.innerHTML="今日打卡紀錄：讀取失敗";}
 }
 
 /* ===== 打卡後發送 Flex Message 給自己 ===== */
 async function sendSelfMessage(record){
-  if(!liff.isInClient() || record.rangeStatus!=="有效打卡區") return;
+  if(!liff.isInClient()) return;
 
   let headerColor = "#3498db"; // 上班藍
-  if(record.status === "下班") headerColor = "#2ecc71";
+  if(record.status === "下班") headerColor = "#2ecc71"; // 下班綠
+  if(record.rangeStatus !== "有效打卡區") headerColor = "#e67e22"; // 異常橘
+
+  let reasonText = record.rangeStatus !== "有效打卡區" ? "異常原因：超出打卡區" : "";
 
   try{
     await liff.sendMessages([{
@@ -190,8 +179,9 @@ async function sendSelfMessage(record){
           spacing:"md",
           contents:[
             {type:"text", text:`狀態：${record.status}`, size:"md"},
-            {type:"text", text:`時間：${record.time}`, size:"md"},
-            {type:"text", text:`位置：${record.company}`, size:"md"}
+            {type:"text", text:`時間：${record.date} ${record.time}`, size:"md"},
+            {type:"text", text:`位置：${record.company}`, size:"md"},
+            ...(reasonText ? [{type:"text", text: reasonText, size:"md", color:"#e67e22"}] : [])
           ]
         }
       }
@@ -233,7 +223,7 @@ async function clockInOut(status){
       userName: userName,
       status: data.status,
       date: data.date,
-      time: formatTime(data.time),
+      time: data.time,
       company: data.company || "未知",
       rangeStatus: data.rangeStatus
     };
@@ -242,12 +232,11 @@ async function clockInOut(status){
       Swal.fire({
         icon:"success",
         title:"🎉 打卡成功！",
-        html:`<strong>打卡時間：</strong> ${record.time}`,
+        html:`<strong>打卡時間：</strong> ${data.date} ${data.time}`,
         showConfirmButton:false,
         timer:2000,
         backdrop:"rgba(0,0,0,0.5)"
       });
-      sendSelfMessage(record); // 只有成功才發送 LIFF
     } else {
       Swal.fire({
         icon:"warning",
@@ -259,6 +248,7 @@ async function clockInOut(status){
       });
     }
 
+    sendSelfMessage(record);
     updateTodayRecords();
     updateStatus();
 
@@ -277,8 +267,9 @@ btnEnd.onclick = () => clockInOut("下班");
 
 /* ===== 頁面載入 ===== */
 window.onload = async()=>{
-  setButtonsLock(false); // UI 立即可點擊
+  setButtonsLock(true);
   await initUser();
+  setButtonsLock(false);
   updateTodayRecords();
   updateStatus();
   dataReady = true;
@@ -287,6 +278,7 @@ window.onload = async()=>{
 </script>
 </body>
 </html>
+
 
 
 
