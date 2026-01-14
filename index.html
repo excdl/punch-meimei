@@ -122,9 +122,11 @@ async function initUser(){
   userName=profile.displayName;
   userInfo.textContent=`${userName} 您好`;
 }
- // 管理員按鈕
-    document.getElementById("btnApprove").style.display =
-        MANAGERS.includes(window.userId) ? "block" : "none";
+ // ✅ 主管顯示簽核按鈕（正確時機）
+  if (MANAGERS.includes(userId)) {
+    document.getElementById("btnApprove").style.display = "block";
+  }
+}
 /* ===== 更新打卡區狀態 ===== */
 async function updateStatus(){
   // 初始占位，灰色提示詞
