@@ -115,18 +115,27 @@ function getCachedGPS(maxAge=15000){
 
 /* ===== LIFF 使用者初始化 ===== */
 async function initUser(){
-  await liff.init({liffId:"2008786085-L1CtKqqv"});
-  if(!liff.isLoggedIn()) await liff.login();
-  const profile=await liff.getProfile();
-  userId=profile.userId;
-  userName=profile.displayName;
-  userInfo.textContent=`${userName} 您好`;
-}
- // ✅ 主管顯示簽核按鈕（正確時機）
+  await liff.init({ liffId: "2008786085-L1CtKqqv" });
+
+  if (!liff.isLoggedIn()) {
+    await liff.login();
+  }
+
+  const profile = await liff.getProfile();
+  userId = profile.userId;
+  userName = profile.displayName;
+
+  userInfo.textContent = `${userName} 您好`;
+
+  console.log("LIFF userId =", userId);
+  console.log("MANAGERS =", MANAGERS);
+  console.log("是否主管 =", MANAGERS.includes(userId));
+
   if (MANAGERS.includes(userId)) {
     document.getElementById("btnApprove").style.display = "block";
   }
 }
+
 /* ===== 更新打卡區狀態 ===== */
 async function updateStatus(){
   // 初始占位，灰色提示詞
